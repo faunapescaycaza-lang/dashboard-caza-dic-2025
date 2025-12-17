@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Análisis de Traslado de Cabezas</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body { font-family: sans-serif; }
+        .chart-container { max-width: 1200px; margin: 20px auto; min-height: 600px; }
+        .chart-container canvas { width: 100% !important; height: auto !important; }
+        button { padding: 10px; margin: 0 10px 20px 0; }
+    </style>
+</head>
+<body>
+    <h2>Análisis de Traslado de Cabezas</h2>
+    <div>
+        <button onclick="renderChart('species')">Especies</button>
+        <button onclick="renderChart('date')">Guías por Fecha</button>
+        <button onclick="renderChart('acm')">Guías por ACM</button>
+        <button onclick="renderChart('acm_type')">Tipo de ACM</button>
+    </div>
+    <div class="chart-container">
+        <canvas id="trasladoChart"></canvas>
+    </div>
+
+    <script src="traslado_cabezas_data.js"></script>
+    <script>
+        let currentChart;
+        Chart.register(ChartDataLabels);
+
+        // Parse the data once
+        const data = JSON.parse(window.trasladoCabezasData);
+
+        function processData(type) {
+            const counts = {};
+            let key;
+
+            switch (type) {
+                case 'species':
+                    key = 'especies_exóticas_posibles_de_ser_cazada_legalmente._(tilde_lo_que_corresponda).';
+                    break;
+                case 'date':
+                    key = 'fecha';
+                    break;
+                case 'acm':
+                    key = 'acm_(área_de_caza_mayor)';
+                    break;
+                case 'acm_type':
+                    key = 'tipo_de_área_de_caza_mayor';
+                    break;
+                default:
+                    return { labels: [], data: [] };
+            }
+
+            for (const item of data) {
+                const value = item[key];
+                if (value) {
+                    counts[value] = (counts[value] || 0) + 1;
+                }
+            }
+
+            const sortedEntries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            const labels = sortedEntries.map(entry => entry[0]);
+            const chartData = sortedEntries.map(entry => entry[1]);
+
+            return { labels, data: chartData };
+        }
+
+        function renderChart(type) {
+            const { labels, data } = processData(type);
+            const ctx = document.getElementById('trasladoChart').getContext('2d');
+
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            let chartType = 'bar';
+            let datasetOptions = {
+                label: 'Cantidad',
+                data: data,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            };
+            let options = {
+                maintainAspectRatio: false,
+                plugins: {
+                    datalabels: {
+                        display: true,
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: (value) => value,
+                        color: '#000'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            };
+            
+            if (type === 'species' || type === 'acm_type') {
+                 chartType = 'pie';
+                 options = {
+                    plugins: {
+                        datalabels: {
+                             formatter: (value, ctx) => {
+                                let sum = 0;
+                                let dataArr = ctx.chart.data.datasets[0].data;
+                                dataArr.map(data => {
+                                    sum += data;
+                                });
+                                let percentage = (value * 100 / sum).toFixed(2) + "%";
+                                return percentage + ' (' + value + ')';
+                            },
+                            color: '#000'
+                        }
+                    }
+                 }
+            } else if (type === 'acm' || type === 'date') {
+                datasetOptions.barPercentage = 1.0;
+                datasetOptions.categoryPercentage = 1.0;
+            }
+
+
+            currentChart = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [datasetOptions]
+                },
+                options: options
+            });
+        }
+        
+        // Initial chart render
+        renderChart('species');
+    </script>
+</body>
+</html>

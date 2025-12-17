@@ -1,0 +1,121 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visor de ACM</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body { font-family: sans-serif; }
+        select { width: 100%; padding: 8px; margin-bottom: 20px; }
+        #acm-details-output { border: 1px solid #ddd; padding: 10px; margin-bottom: 20px; min-height: 200px; display: none; }
+        #acm-details-output h3 { margin-top: 0; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px;}
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { padding: 10px; margin: 0 10px 20px 0; }
+        .chart-container { max-width: 600px; margin: 20px auto; } /* Centralize and size charts */
+        .chart-container canvas { width: 100% !important; height: auto !important; } /* Make canvas responsive within container */
+        #permitsByCountryChartContainer, #permitsByMonthChartContainer { max-width: 700px; height: 400px; } /* Specific sizing for larger charts */
+    </style>
+</head>
+<body>
+    <h2>Visor de ACM</h2>
+    <select id="acm-select" onchange="showAcmDetails()">
+        <option value="">Selecciona un ACM</option>
+        <option value="Neuquén">Neuquén</option><option value="Algar S.a.">Algar S.a.</option><option value="Estancia Argentina Moquehue Neuquen">Estancia Argentina Moquehue Neuquen</option><option value="Junin De Los Andes">Junin De Los Andes</option><option value="Neuquen">Neuquen</option><option value="La Mimi">La Mimi</option><option value="Dove Outfitters Srl">Dove Outfitters Srl</option><option value="La Gotera">La Gotera</option><option value="Estancia Huechahue">Estancia Huechahue</option><option value="Estancias Los Peucos Y Los Ranchos">Estancias Los Peucos Y Los Ranchos</option><option value="Parque Diana">Parque Diana</option><option value="Cabeza De Zorro">Cabeza De Zorro</option><option value="Cajon De Hualcupen Y Los Ñires">Cajon De Hualcupen Y Los Ñires</option><option value="Los Manantiales De Collon Cura">Los Manantiales De Collon Cura</option><option value="La Rinconada S.a">La Rinconada S.a</option><option value="Santa Lucía">Santa Lucía</option><option value="Ea. Chacabuco">Ea. Chacabuco</option><option value="Sihuen">Sihuen</option><option value="San Pedro">San Pedro</option><option value="El Rincón">El Rincón</option><option value="Mamuil Malal">Mamuil Malal</option><option value="Estancia Cerro De Los Pinos">Estancia Cerro De Los Pinos</option><option value="Las Brenas">Las Brenas</option><option value="La Gabcia">La Gabcia</option><option value="Las Breñas">Las Breñas</option><option value="Palitue">Palitue</option><option value="Estancia La Gotera">Estancia La Gotera</option><option value="Estancia Los Lirios">Estancia Los Lirios</option><option value="Estancia Quillen">Estancia Quillen</option><option value="Estancia Quilachanquil">Estancia Quilachanquil</option><option value="Estancia Los Helechos">Estancia Los Helechos</option><option value="Estancia Santa Lucia">Estancia Santa Lucia</option><option value="Estancia Rahue">Estancia Rahue</option><option value="Estancia Belisle">Estancia Belisle</option><option value="La Belisle">La Belisle</option><option value="Cerro De Los Pinos">Cerro De Los Pinos</option><option value="Donap Srl">Donap Srl</option><option value="Ea. Lago Machonico">Ea. Lago Machonico</option><option value="Santa Rosa">Santa Rosa</option><option value="Estancia El Rincón">Estancia El Rincón</option><option value="El Recuerdo">El Recuerdo</option><option value="El Cerrito">El Cerrito</option><option value="Collunco">Collunco</option><option value="El Refugio">El Refugio</option><option value="Estancia Pilolil">Estancia Pilolil</option><option value="Collon Cura">Collon Cura</option><option value="Calcatre">Calcatre</option><option value="Estancia Caleufu">Estancia Caleufu</option><option value="Lácar - Los Lagos">Lácar - Los Lagos</option><option value="Los Remolinos">Los Remolinos</option><option value="Lago Machónico">Lago Machónico</option><option value="Ruta 52 Y Ruta 40">Ruta 52 Y Ruta 40</option><option value="Casa De Lata Criadero">Casa De Lata Criadero</option><option value="Las Pircas">Las Pircas</option><option value="Estancia Santa Rosa">Estancia Santa Rosa</option><option value="Estancia Paylacura">Estancia Paylacura</option><option value="Bey Malek">Bey Malek</option><option value="Estancia La Maria Juana">Estancia La Maria Juana</option><option value="Nahuel Mapi">Nahuel Mapi</option><option value="Estancias Del Kilka S.a.">Estancias Del Kilka S.a.</option><option value="Zona Andina Sur">Zona Andina Sur</option><option value="Estancia San Pedro">Estancia San Pedro</option><option value="Caminos Rural">Caminos Rural</option><option value="Estancia Tres Rios">Estancia Tres Rios</option><option value="Estancia La Rinconada">Estancia La Rinconada</option><option value="Estancia Casa De Lata">Estancia Casa De Lata</option><option value="El Refugio Quillen">El Refugio Quillen</option><option value="Calcatre S.a.">Calcatre S.a.</option><option value="Quillen">Quillen</option><option value="Huechahue">Huechahue</option><option value="Estancia Chimehuin">Estancia Chimehuin</option><option value="Estancia Santa Isabel">Estancia Santa Isabel</option><option value="Donap S.r.l.">Donap S.r.l.</option><option value="Estancia Las Breñas">Estancia Las Breñas</option><option value="Cdz">Cdz</option>
+    </select>
+
+    <div id="acm-details-output">
+        <h3 id="selectedAcmTitle"></h3>
+        <p>Cantidad total de permisos: <strong id="totalPermitsValue"></strong></p>
+
+        <h3>Permisos por País</h3>
+        <div id="permitsByCountryChartContainer" class="chart-container"><canvas id="permitsByCountryChart"></canvas></div>
+        <div id="permitsByCountryTableContainer"></div>
+
+        <h3>Tipos de Caza</h3>
+        <div id="huntingTypesChartContainer" class="chart-container"><canvas id="huntingTypesChart"></canvas></div>
+        <div id="huntingTypesTableContainer"></div>
+
+        <h3>Permisos por Categoría</h3>
+        <div id="categoriesChartContainer" class="chart-container"><canvas id="categoriesChart"></canvas></div>
+        <div id="categoriesTableContainer"></div>
+
+        <h3>Permisos por Mes</h3>
+        <div id="permitsByMonthChartContainer" class="chart-container"><canvas id="permitsByMonthChart"></canvas></div>
+        <div id="permitsByMonthTableContainer"></div>
+
+        <h3>Responsables Guía de Caza</h3>
+        <div id="responsableGuiaListContainer"></div>
+
+        <h3>Nombres de Cazadores</h3>
+        <div id="hunterNamesListContainer"></div>
+
+        <h3>Correos Electrónicos</h3>
+        <div id="emailsListContainer"></div>
+    </div>
+
+    <script src="acm_aggregated_data.js"></script>
+    <script>
+        let permitsByCountryChart, huntingTypesChart, categoriesChart, permitsByMonthChart;
+        Chart.register(ChartDataLabels);
+
+        function resetCharts() {
+            if (permitsByCountryChart) permitsByCountryChart.destroy();
+            if (huntingTypesChart) huntingTypesChart.destroy();
+            if (categoriesChart) categoriesChart.destroy();
+            if (permitsByMonthChart) permitsByMonthChart.destroy();
+        }
+
+        function showAcmDetails() {
+            resetCharts();
+            const select = document.getElementById('acm-select');
+            const selectedAcmName = select.value;
+            const acmDetailsOutput = document.getElementById('acm-details-output');
+            
+            if (!selectedAcmName) {
+                acmDetailsOutput.style.display = 'none';
+                return;
+            }
+
+            const acmAggregatedData = window.acmAggregatedData[selectedAcmName];
+
+            if (acmAggregatedData) {
+                document.getElementById('selectedAcmTitle').textContent = 'Análisis para: ' + selectedAcmName;
+                document.getElementById('totalPermitsValue').textContent = acmAggregatedData.total_permits;
+
+                // Permits by Country
+                document.getElementById('permitsByCountryTableContainer').innerHTML = acmAggregatedData.country_table;
+                const ctxCountry = document.getElementById('permitsByCountryChart').getContext('2d');
+                permitsByCountryChart = new Chart(ctxCountry, { type: 'bar', data: { labels: acmAggregatedData.country_labels, datasets: [{ label: 'Cantidad de Permisos', data: acmAggregatedData.country_data, backgroundColor: 'rgba(54, 162, 235, 0.2)', borderColor: ['rgba(54, 162, 235, 1)'], borderWidth: 1 }] }, options: { plugins: { datalabels: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
+
+                // Hunting Types
+                document.getElementById('huntingTypesTableContainer').innerHTML = acmAggregatedData.hunting_type_table;
+                const ctxHuntingType = document.getElementById('huntingTypesChart').getContext('2d');
+                huntingTypesChart = new Chart(ctxHuntingType, { type: 'pie', data: { labels: acmAggregatedData.hunting_type_labels, datasets: [{ data: acmAggregatedData.hunting_type_data, backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)'], borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)'], borderWidth: 1 }] }, options: { plugins: { datalabels: { formatter: (value, ctx) => { let sum = 0; let dataArr = ctx.chart.data.datasets[0].data; dataArr.map(data => { sum += data; }); let percentage = (value*100 / sum).toFixed(2)+"%"; return percentage + ' (' + value + ')'; }, color: '#000' } } } });
+
+                // Categories
+                document.getElementById('categoriesTableContainer').innerHTML = acmAggregatedData.category_table;
+                const ctxCategories = document.getElementById('categoriesChart').getContext('2d');
+                categoriesChart = new Chart(ctxCategories, { type: 'pie', data: { labels: acmAggregatedData.category_labels, datasets: [{ data: acmAggregatedData.category_data, backgroundColor: ['rgba(153, 102, 255, 0.2)', 'rgba(255, 159, 64, 0.2)', 'rgba(201, 203, 207, 0.2)'], borderColor: ['rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)', 'rgba(201, 203, 207, 1)'], borderWidth: 1 }] }, options: { plugins: { datalabels: { formatter: (value, ctx) => { let sum = 0; let dataArr = ctx.chart.data.datasets[0].data; dataArr.map(data => { sum += data; }); let percentage = (value*100 / sum).toFixed(2)+"%"; return percentage + ' (' + value + ')'; }, color: '#000' } } } });
+
+                // Permits by Month
+                document.getElementById('permitsByMonthTableContainer').innerHTML = acmAggregatedData.permits_by_month_table;
+                const ctxPermitsByMonth = document.getElementById('permitsByMonthChart').getContext('2d');
+                permitsByMonthChart = new Chart(ctxPermitsByMonth, { type: 'bar', data: { labels: acmAggregatedData.permits_by_month_labels, datasets: [{ label: 'Cantidad de Permisos', data: acmAggregatedData.permits_by_month_data, backgroundColor: 'rgba(255, 205, 86, 0.2)', borderColor: ['rgba(255, 205, 86, 1)'], borderWidth: 1 }] }, options: { plugins: { datalabels: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
+
+                // Lists of Responsables and Hunters
+                document.getElementById('responsableGuiaListContainer').innerHTML = acmAggregatedData.responsable_guia_list;
+                document.getElementById('hunterNamesListContainer').innerHTML = acmAggregatedData.hunter_names_list;
+                document.getElementById('emailsListContainer').innerHTML = acmAggregatedData.emails_list;
+
+
+                acmDetailsOutput.style.display = 'block';
+            } else {
+                acmDetailsOutput.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

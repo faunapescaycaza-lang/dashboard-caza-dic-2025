@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Caza</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .chart-container { display: none; margin: 20px auto; background-color: #fff; border-radius: 8px; padding: 20px; width: 100%; }
+        #countryChartContainer, #acmChartContainer, #surfaceChartContainer { width: 100%; }
+        #acmChartContainer { height: 600px; }
+        #acm-details-output, #details-container { border: 1px solid #ddd; padding: 10px; display: none; margin-bottom: 20px; background-color: #fff; border-radius: 8px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px;}
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { margin: 5px; }
+        .list-container ul { padding-left: 20px; }
+        .nav-link.active { font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#" onclick="renderView('home')">Dashboard de Caza</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="renderView('permits')">Análisis de Permisos</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="renderView('acm')">Análisis de ACM</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="renderView('establecimientos')">Análisis de Establecimientos</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="renderView('traslado-cabezas')">Traslado de Cabezas</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main id="content" class="container mt-4"></main>
+
+    <!-- Modal for "Others" details -->
+    <div class="modal fade" id="othersModal" tabindex="-1" aria-labelledby="othersModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="othersModalLabel">Detalle de "Otros"</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="othersModalBody">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+        let reportData = {}; 
+        let createdCharts = {}; 
+        let othersModal;
+        Chart.register(ChartDataLabels);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            othersModal = new bootstrap.Modal(document.getElementById('othersModal'));
+            renderView('home'); // Load home view by default
+        });
+
+        function clearContent() {
+            document.getElementById('content').innerHTML = '';
+            for (const chartId in createdCharts) {
+                createdCharts[chartId].destroy();
+            }
+            createdCharts = {};
+        }
+        
+        async function renderView(viewName) {
+            clearContent();
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            if(viewName !== 'home') {
+                const activeLink = document.querySelector(`.nav-link[onclick="renderView('${viewName}')"]`);
+                if(activeLink) activeLink.classList.add('active');
+            }
+
+            if (viewName === 'home') renderHomeView();
+            else if (viewName === 'permits') await renderPermitsView();
+            else if (viewName === 'acm') await renderAcmView();
+            else if (viewName === 'establecimientos') await renderEstablecimientosView();
+            else if (viewName === 'traslado-cabezas') await renderTrasladoCabezasView();
+        }
+
+        async function renderTrasladoCabezasView() {
+            if (!reportData.trasladoCabezas) {
+                reportData.trasladoCabezas = await (await fetch('/api/reporte/traslado-cabezas')).json();
+            }
+            const data = reportData.trasladoCabezas;
+            let content = '<h2>Visor de Traslado de Cabezas</h2>';
+            
+            if(data && data.length > 0) {
+                content += `<p>Cantidad Total de Traslados: <strong>${data.length}</strong></p>`;
+                content += `<select id="traslado-cabezas-select" class="form-select" onchange="showTrasladoCabezasDetails()"><option value="">Selecciona un Registro</option>`;
+                data.forEach(item => {
+                    // Using id_único as value and a combination of name and species for the text
+                    content += `<option value="${item.id_único}">${item.nombre_y_apellido} - ${item.especies_exóticas_posibles_de_ser_cazada_legalmente___tilde_lo_que_corresponda__}</option>`;
+                });
+                content += `</select>
+                <div id="traslado-cabezas-details-container" class="sub-view mt-4" style="display: none;"></div>
+                <div>
+                    <button class="btn btn-primary" onclick="toggleTrasladoCabezasChart('speciesChartContainer')">Especies</button>
+                    <button class="btn btn-primary" onclick="toggleTrasladoCabezasChart('dateChartContainer')">Guías por Fecha</button>
+                    <button class="btn btn-primary" onclick="toggleTrasladoCabezasChart('acmGuidesChartContainer')">Guías por ACM</button>
+                    <button class="btn btn-primary" onclick="toggleTrasladoCabezasChart('acmTypeChartContainer')">Por Tipo de ACM</button>
+                </div>
+                <div id="speciesChartContainer" class="chart-container" style="height: 800px;"><canvas id="speciesChart"></canvas></div>
+                <div id="dateChartContainer" class="chart-container" style="height: 800px;"><canvas id="dateChart"></canvas></div>
+                <div id="acmGuidesChartContainer" class="chart-container" style="height: 1200px;"><canvas id="acmGuidesChart"></canvas></div>
+                <div id="acmTypeChartContainer" class="chart-container" style="height: 800px;"><canvas id="acmTypeChart"></canvas></div>`;
+            } else {
+                content += '<p>No data available for this report.</p>';
+            }
+            
+            document.getElementById('content').innerHTML = content;
+        }
+
+        function showTrasladoCabezasDetails() {
+            const selectedId = document.getElementById('traslado-cabezas-select').value;
+            const detailsContainer = document.getElementById('traslado-cabezas-details-container');
+            if (!selectedId) {
+                detailsContainer.style.display = 'none';
+                return;
+            }
+
+            const selectedItem = reportData.trasladoCabezas.find(item => item.id_único === selectedId);
+
+            if (selectedItem) {
+                let table = '<table class="table table-sm table-bordered">';
+                for (const key in selectedItem) {
+                    table += `<tr><th>${key}</th><td>${selectedItem[key]}</td></tr>`;
+                }
+                table += '</table>';
+                detailsContainer.innerHTML = table;
+                detailsContainer.style.display = 'block';
+            }
+        }
+
+        function toggleTrasladoCabezasChart(containerId) {
+            const data = reportData.trasladoCabezas;
+            let chartInfo;
+
+            if (containerId === 'speciesChartContainer') {
+                const speciesCounts = data.reduce((acc, item) => {
+                    const species = item['especies_exóticas_posibles_de_ser_cazada_legalmente._(tilde_lo_que_corresponda).'];
+                    acc[species] = (acc[species] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const sortedSpecies = Object.entries(speciesCounts).sort(([,a],[,b]) => b-a);
+                const labels = sortedSpecies.map(entry => entry[0]);
+                const counts = sortedSpecies.map(entry => entry[1]);
+
+                chartInfo = {
+                    chartId: 'speciesChart',
+                    config: {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Cantidad de Especies',
+                                data: counts,
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Cantidad solicitada por especie para traslado de cabeza',
+                                    font: { size: 16 }
+                                }
+                            }
+                        }
+                    }
+                };
+            } else if (containerId === 'dateChartContainer') {
+                const guidesByMonth = data.reduce((acc, item) => {
+                    const monthYear = item['month_year'];
+                    const guideName = item['nombre_y_apellido'];
+                    if (!acc[monthYear]) {
+                        acc[monthYear] = new Set();
+                    }
+                    acc[monthYear].add(guideName);
+                    return acc;
+                }, {});
+
+                // Convert Set sizes to counts and prepare for charting
+                const sortedMonthYears = Object.keys(guidesByMonth).sort();
+                const chartLabels = sortedMonthYears.map(monthYear => {
+                    const [year, month] = monthYear.split('-');
+                    const date = new Date(year, month - 1); // Month is 0-indexed in Date object
+                    return date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+                });
+                const chartCounts = sortedMonthYears.map(monthYear => guidesByMonth[monthYear].size);
+
+                chartInfo = {
+                    chartId: 'dateChart',
+                    config: {
+                        type: 'bar',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [{
+                                label: 'Cantidad de Guías Únicos por Mes',
+                                data: chartCounts,
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Fecha solicitada para el traslado de cabezas',
+                                    font: { size: 16 }
+                                }
+                            }
+                        }
+                    }
+                };
+            } else if (containerId === 'acmGuidesChartContainer') {
+                const guidesByAcm = data.reduce((acc, item) => {
+                    const acm = item['acm_(área_de_caza_mayor)'];
+                    const guideName = item['nombre_y_apellido'];
+                    if (!acc[acm]) {
+                        acc[acm] = new Set();
+                    }
+                    acc[acm].add(guideName);
+                    return acc;
+                }, {});
+
+                const chartLabels = Object.keys(guidesByAcm).sort();
+                const chartCounts = chartLabels.map(acm => guidesByAcm[acm].size);
+
+                chartInfo = {
+                    chartId: 'acmGuidesChart',
+                    config: {
+                        type: 'bar',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [{
+                                label: 'Cantidad de Guías Únicos',
+                                data: chartCounts,
+                                barPercentage: 0.8,
+                                categoryPercentage: 0.9
+                            }]
+                        }, options: {
+                            indexAxis: 'y',
+                            maintainAspectRatio: false,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Cantidad de guías solicitada por ACM',
+                                    font: { size: 16 }
+                                }
+                            }
+                        }
+                    }
+                };
+            } else if (containerId === 'acmTypeChartContainer') {
+                const acmTypeCounts = data.reduce((acc, item) => {
+                    const acmType = item['tipo_de_área_de_caza_mayor'];
+                    acc[acmType] = (acc[acmType] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const chartLabels = Object.keys(acmTypeCounts);
+                const chartCounts = Object.values(acmTypeCounts);
+
+                chartInfo = {
+                    chartId: 'acmTypeChart',
+                    config: {
+                        type: 'bar',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [{
+                                label: 'Cantidad',
+                                data: chartCounts,
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Guía de traslado solicitada segun tipo de ACM',
+                                    font: { size: 16 }
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+            toggleSubView(containerId, chartInfo);
+        }
+
+        function renderHomeView() {
+            document.getElementById('content').innerHTML = `
+                <div class="text-center mt-5">
+                    <img src="Datos_Crudos/Guardafauna - 1.png" alt="Logo Guardafauna" class="img-fluid mx-auto d-block mb-4" style="max-width: 150px;">
+                    <h1 class="text-dark">Análisis de Datos Temporada de Caza 2025</h1>
+                    <h2 class="text-secondary">Dirección Provincial de Fauna</h2>
+                    <div class="mt-4">
+                        <button class="btn btn-primary btn-lg mx-2" onclick="renderView('permits')">Análisis de Permisos</button>
+                        <button class="btn btn-success btn-lg mx-2" onclick="renderView('acm')">Análisis de ACM</button>
+                        <button class="btn btn-info btn-lg mx-2" onclick="renderView('establecimientos')">Análisis de Establecimientos</button>
+                        <button class="btn btn-warning btn-lg mx-2" onclick="renderView('traslado-cabezas')">Traslado de Cabezas</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Other view functions (renderPermitsView, etc.) ---
+        async function renderPermitsView() {
+            if (!reportData.permits) reportData.permits = await (await fetch('/api/reporte/permisos')).json();
+            const data = reportData.permits;
+            document.getElementById('content').innerHTML = `<h2>Visor de Permisos de Caza</h2><select id="permit-select" class="form-select" onchange="showPermitDetails()"><option value="">Selecciona un Permiso</option></select><div id="details-container" class="sub-view"></div><div><button class="btn btn-primary" onclick="togglePermitsChart('countryChartContainer')">Permisos por País</button><button class="btn btn-primary" onclick="togglePermitsChart('huntingTypeChartContainer')">Tipos de Caza</button><button class="btn btn-primary" onclick="togglePermitsChart('acmChartContainer')">Permisos por ACM</button><button class="btn btn-primary" onclick="togglePermitsChart('categoryChartContainer')">Permisos por Categoría</button><button class="btn btn-primary" onclick="toggleSubView('permitsCountContainer')">Cantidad Total</button><button class="btn btn-primary" onclick="togglePermitsChart('permitsByMonthChartContainer')">Permisos por Mes</button></div><div id="countryChartContainer" class="chart-container"><canvas id="countryChart"></canvas></div><div id="countryChartDetailButtonContainer" class="text-center mt-2 mb-4"></div><div id="huntingTypeChartContainer" class="chart-container"><canvas id="huntingTypeChart"></canvas></div><div id="acmChartContainer" class="chart-container" style="max-width: 1000px; height: 1500px;"><canvas id="acmChart"></canvas></div><div id="categoryChartContainer" class="chart-container"><canvas id="categoryChart"></canvas></div><div id="permitsCountContainer" class="chart-container" style="display:none;"><h4>Cantidad total de permisos vendidos: <strong>${data.total_permits}</strong></h4></div><div id="permitsByMonthChartContainer" class="chart-container" style="max-width: 1000px;"><canvas id="permitsByMonthChart"></canvas></div>`;
+            const select = document.getElementById('permit-select');
+            data.permits_data.forEach(permit => select.appendChild(new Option(permit.nombre_y_apellido, permit.id_único)));
+        }
+        function showPermitDetails() {
+            const selectedId = document.getElementById('permit-select').value;
+            const detailsContainer = document.getElementById('details-container');
+            if (!selectedId) { detailsContainer.style.display = 'none'; return; }
+            const selectedPermit = reportData.permits.permits_data.find(e => e['id_único'] === selectedId);
+            if(selectedPermit) {
+                let table = '<table class="table table-sm table-bordered">';
+                for (const key in selectedPermit) { table += `<tr><th>${key}</th><td>${selectedPermit[key]}</td></tr>`; }
+                table += '</table>';
+                detailsContainer.innerHTML = table;
+                detailsContainer.style.display = 'block';
+            }
+        }
+        function togglePermitsChart(containerId) {
+            const data = reportData.permits.charts;
+            let chartInfo;
+            document.getElementById('countryChartDetailButtonContainer').innerHTML = '';
+            if (containerId === 'countryChartContainer') {
+                chartInfo = { chartId: 'countryChart', config: { type: 'bar', data: { labels: data.country.labels, datasets: [{ label: 'Permisos', data: data.country.data }] }, options: { plugins: { title: { display: true, text: 'Cantidad de permisos según País', font: { size: 16 } } } } } };
+                if (data.country.others_breakdown && Object.keys(data.country.others_breakdown).length > 0) document.getElementById('countryChartDetailButtonContainer').innerHTML = `<button class="btn btn-secondary btn-sm mt-2" onclick="showOthersModal()">Ver detalle de "Otros"</button>`;
+            }
+            else if (containerId === 'huntingTypeChartContainer') chartInfo = { chartId: 'huntingTypeChart', config: { type: 'pie', data: { labels: data.hunting_type.labels, datasets: [{ data: data.hunting_type.data }] }, options: { plugins: { title: { display: true, text: 'Tipos de Caza', font: { size: 16 } } } } } };
+            else if (containerId === 'acmChartContainer') chartInfo = { chartId: 'acmChart', config: { type: 'bar', data: { labels: data.acm.labels, datasets: [{ label: 'Permisos', data: data.acm.data, barPercentage: 0.7, categoryPercentage: 0.6, barThickness: 20 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true, ticks: { font: { size: 10 }, padding: 5 } } }, plugins: { title: { display: true, text: 'Cantidad de Permisos por ACM', font: { size: 16 } } } } } };
+            else if (containerId === 'categoryChartContainer') chartInfo = { chartId: 'categoryChart', config: { type: 'pie', data: { labels: data.category.labels, datasets: [{ data: data.category.data }] }, options: { plugins: { title: { display: true, text: 'Permisos por Categoría', font: { size: 16 } } } } } };
+            else if (containerId === 'permitsByMonthChartContainer') chartInfo = { chartId: 'permitsByMonthChart', config: { type: 'bar', data: { labels: data.permits_by_month.labels, datasets: [{ label: 'Permisos', data: data.permits_by_month.data }] }, options: { plugins: { title: { display: true, text: 'Cantidad de Permisos por Mes', font: { size: 16 } } } } } };
+            toggleSubView(containerId, chartInfo);
+        }
+        function showOthersModal() {
+            const breakdown = reportData.permits.charts.country.others_breakdown;
+            const modalBody = document.getElementById('othersModalBody');
+            let content = '<table class="table table-striped"><thead><tr><th>País/Localidad</th><th>Permisos</th></tr></thead><tbody>';
+            const sortedBreakdown = Object.entries(breakdown).sort(([,a],[,b]) => b-a);
+            for(const [key, value] of sortedBreakdown) content += `<tr><td>${key}</td><td>${value}</td></tr>`;
+            content += '</tbody></table>';
+            modalBody.innerHTML = content;
+            othersModal.show();
+        }
+        async function renderAcmView() {
+            if (!reportData.acm) reportData.acm = await (await fetch('/api/reporte/acm')).json();
+            const data = reportData.acm;
+            document.getElementById('content').innerHTML = `<h2>Visor de ACM</h2><select id="acm-select" class="form-select" onchange="showAcmDetails()"><option value="">Selecciona un ACM</option></select><div id="acm-details-output" class="sub-view"></div>`;
+            const select = document.getElementById('acm-select');
+            data.unique_acms.sort().forEach(acmName => select.appendChild(new Option(acmName, acmName)));
+        }
+        function showAcmDetails() {
+            const selectedAcmName = document.getElementById('acm-select').value;
+            const acmDetailsOutput = document.getElementById('acm-details-output');
+            if (!selectedAcmName) { acmDetailsOutput.style.display = 'none'; return; }
+            const acmData = reportData.acm.aggregated_data[selectedAcmName];
+            if (acmData) {
+                acmDetailsOutput.innerHTML = `<h3>Análisis para: ${selectedAcmName}</h3><p>Cantidad total de permisos: <strong>${acmData.total_permits}</strong></p><div class="row"><div class="col-md-6"><h4>Permisos por País</h4><div class="chart-container" style="display:block;max-width:none;"><canvas id="acmCountryChart"></canvas></div></div><div class="col-md-6"><h4>Tipos de Caza</h4><div class="chart-container" style="display:block;max-width:none;"><canvas id="acmHuntingTypeChart"></canvas></div></div><div class="col-md-6"><h4>Permisos por Categoría</h4><div class="chart-container" style="display:block;max-width:none;"><canvas id="acmCategoryChart"></canvas></div></div><div class="col-md-6"><h4>Permisos por Mes</h4><div class="chart-container" style="display:block;max-width:none;"><canvas id="acmPermitsByMonthChart"></canvas></div></div><div class="col-md-4"><h4>Responsables Guía</h4><div class="list-container">${createList(acmData.lists.responsable_guia)}</div></div><div class="col-md-4"><h4>Cazadores</h4><div class="list-container">${createList(acmData.lists.hunter_names)}</div></div><div class="col-md-4"><h4>Correos</h4><div class="list-container">${createList(acmData.lists.emails)}</div></div></div>`;
+                acmDetailsOutput.style.display = 'block';
+                const chartsData = acmData.charts;
+                if(createdCharts['acmCountryChart']) createdCharts['acmCountryChart'].destroy(); createdCharts['acmCountryChart'] = new Chart(document.getElementById('acmCountryChart').getContext('2d'), { type: 'bar', data: { labels: chartsData.country.labels, datasets: [{ label: 'Permisos', data: chartsData.country.data }] } });
+                if(createdCharts['acmHuntingTypeChart']) createdCharts['acmHuntingTypeChart'].destroy(); createdCharts['acmHuntingTypeChart'] = new Chart(document.getElementById('acmHuntingTypeChart').getContext('2d'), { type: 'pie', data: { labels: chartsData.hunting_type.labels, datasets: [{ data: chartsData.hunting_type.data }] } });
+                if(createdCharts['acmCategoryChart']) createdCharts['acmCategoryChart'].destroy(); createdCharts['acmCategoryChart'] = new Chart(document.getElementById('acmCategoryChart').getContext('2d'), { type: 'pie', data: { labels: chartsData.category.labels, datasets: [{ data: chartsData.category.data }] } });
+                if(createdCharts['acmPermitsByMonthChart']) createdCharts['acmPermitsByMonthChart'].destroy(); createdCharts['acmPermitsByMonthChart'] = new Chart(document.getElementById('acmPermitsByMonthChart').getContext('2d'), { type: 'bar', data: { labels: chartsData.permits_by_month.labels, datasets: [{ label: 'Permisos', data: chartsData.permits_by_month.data }] } });
+            }
+        }
+
+        function toggleSubView(containerId, chartInfo = null) {
+            document.querySelectorAll('.chart-container, .sub-view').forEach(el => {
+                if (el.id !== containerId) {
+                    el.style.display = 'none';
+                }
+            });
+
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const isVisible = container.style.display === 'block';
+            container.style.display = isVisible ? 'none' : 'block';
+
+            if (chartInfo && container.style.display === 'block') {
+                if (createdCharts[chartInfo.chartId]) {
+                    createdCharts[chartInfo.chartId].destroy();
+                }
+                const ctx = document.getElementById(chartInfo.chartId).getContext('2d');
+                createdCharts[chartInfo.chartId] = new Chart(ctx, chartInfo.config);
+            }
+        }
+
+        function createList(items) {
+            if (!items || items.length === 0) return '<ul><li>No data</li></ul>';
+            let listHtml = '<ul>';
+            items.forEach(item => {
+                listHtml += `<li>${item}</li>`;
+            });
+            listHtml += '</ul>';
+            return listHtml;
+        }
+
+        async function renderEstablecimientosView() {
+            if (!reportData.establecimientos) reportData.establecimientos = await (await fetch('/api/reporte/establecimientos')).json();
+            const data = reportData.establecimientos;
+            document.getElementById('content').innerHTML = `<h2>Visor de Establecimientos</h2><select id="establishment-select" class="form-select" onchange="showEstablecimientoDetails()"><option value="">Selecciona un establecimiento</option></select><div id="details-container" class="sub-view"></div><div><button class="btn btn-info" onclick="toggleEstablecimientoChart('surfaceChartContainer')">Superficie</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('departmentChartContainer')">Por Departamento</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('breedingSiteChartContainer')">Por Tipo de Criadero</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('speciesChartContainer')">Especies</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('deerEstimationChartContainer')">Estimación de Ciervos</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('deerTrendChartContainer')">Tendencia de Ciervos</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('environmentChartContainer')">Ambientes</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('furtiveExtractionChartContainer')">Extracción Furtiva</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('boarEstimationChartContainer')">Est. Jabalíes</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('pumaEstimationChartContainer')">Est. Pumas</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('pumaTrendChartContainer')">Tendencia Pumas</button><button class="btn btn-info" onclick="toggleEstablecimientoChart('guanacosChartContainer')">Guanacos</button></div><div id="surfaceChartContainer" class="chart-container" style="max-width: 1000px; height: 1500px;"><canvas id="surfaceChart"></canvas></div><div id="departmentChartContainer" class="chart-container" style="max-width: 1000px;"><canvas id="departmentChart"></canvas></div><div id="breedingSiteChartContainer" class="chart-container"><canvas id="breedingSiteChart"></canvas></div><div id="speciesChartContainer" class="chart-container" style="max-width: 1000px;"><canvas id="speciesChart"></canvas></div><div id="deerEstimationChartContainer" class="chart-container"><canvas id="deerEstimationChart"></canvas></div><div id="deerTrendChartContainer" class="chart-container"><canvas id="deerTrendChart"></canvas></div><div id="environmentChartContainer" class="chart-container"><canvas id="environmentChart"></canvas></div><div id="furtiveExtractionChartContainer" class="chart-container" style="max-width: 1000px;"><canvas id="furtiveExtractionChart"></canvas><div id="furtiveExtractionTable"></div></div><div id="boarEstimationChartContainer" class="chart-container"><canvas id="boarEstimationChart"></canvas></div><div id="pumaEstimationChartContainer" class="chart-container"><canvas id="pumaEstimationChart"></canvas></div><div id="pumaTrendChartContainer" class="chart-container"><canvas id="pumaTrendChart"></canvas></div><div id="guanacosChartContainer" class="chart-container"><canvas id="guanacosChart"></canvas></div>`;
+            const select = document.getElementById('establishment-select');
+            data.establecimientos_data.sort((a,b) => a['Nombre del establecimiento'].localeCompare(b['Nombre del establecimiento'])).forEach(est => select.appendChild(new Option(est['Nombre del establecimiento'], est['Nombre del establecimiento'])));
+        }
+        function showEstablecimientoDetails() {
+            const selectedName = document.getElementById('establishment-select').value;
+            const detailsContainer = document.getElementById('details-container');
+            if (!selectedName) { detailsContainer.style.display = 'none'; return; }
+            const selectedEst = reportData.establecimientos.establecimientos_data.find(e => e['Nombre del establecimiento'] === selectedName);
+            if (selectedEst) {
+                let table = '<table class="table table-sm table-bordered">';
+                for (const key in selectedEst) { table += `<tr><th>${key}</th><td>${selectedEst[key]}</td></tr>`; }
+                table += '</table>';
+                detailsContainer.innerHTML = table;
+                detailsContainer.style.display = 'block';
+            }
+        }
+        function toggleEstablecimientoChart(containerId) {
+            const data = reportData.establecimientos.charts;
+            let chartInfo;
+            if (containerId === 'surfaceChartContainer') chartInfo = { chartId: 'surfaceChart', config: { type: 'bar', data: { labels: data.surface.labels, datasets: [{ label: 'Superficie (ha)', data: data.surface.data, barPercentage: 0.7, categoryPercentage: 0.6, barThickness: 20 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true, ticks: { font: { size: 10 }, padding: 5 } } }, plugins: { title: { display: true, text: 'Superficie de las ACM declaradas para actividad de caza', font: { size: 16 } } } } } };
+            else if (containerId === 'departmentChartContainer') chartInfo = { chartId: 'departmentChart', config: { type: 'bar', data: { labels: data.department.labels, datasets: [{ label: '# Establecimientos', data: data.department.data }] }, options: { plugins: { title: { display: true, text: 'Establecimientos de Caza por departamento', font: { size: 16 } } } } } };
+            else if (containerId === 'breedingSiteChartContainer') chartInfo = { chartId: 'breedingSiteChart', config: { type: 'pie', data: { labels: data.breeding_site.labels, datasets: [{ data: data.breeding_site.data }] }, options: { plugins: { title: { display: true, text: 'Establecimiento inscripto como criadero de Fauna', font: { size: 16 } } } } } };
+            else if (containerId === 'speciesChartContainer') chartInfo = { chartId: 'speciesChart', config: { type: 'bar', data: { labels: data.species.labels, datasets: [{ label: '# Establecimientos', data: data.species.data }] }, options: { plugins: { title: { display: true, text: 'Especies solicitada para actividad de caza', font: { size: 16 } } } } } };
+            else if (containerId === 'deerEstimationChartContainer') chartInfo = { chartId: 'deerEstimationChart', config: { type: 'bar', data: { labels: data.deer_estimation.labels, datasets: [{ label: '# Establecimientos', data: data.deer_estimation.data }] }, options: { plugins: { title: { display: true, text: 'Estimación de Ciervos segun las ACM', font: { size: 16 } } } } } };
+            else if (containerId === 'deerTrendChartContainer') chartInfo = { chartId: 'deerTrendChart', config: { type: 'pie', data: { labels: data.deer_trend.labels, datasets: [{ data: data.deer_trend.data }] }, options: { plugins: { title: { display: true, text: 'Tendencias de Ciervos segun las ACM en los ultimos años', font: { size: 16 } } } } } };
+            else if (containerId === 'environmentChartContainer') chartInfo = { chartId: 'environmentChart', config: { type: 'bar', data: { labels: data.environment.labels, datasets: [{ label: '# Establecimientos', data: data.environment.data }] }, options: { plugins: { title: { display: true, text: 'Ambiente prefencial para los ciervos segun las ACM', font: { size: 16 } } } } } };
+            else if (containerId === 'furtiveExtractionChartContainer') {
+                chartInfo = { chartId: 'furtiveExtractionChart', config: { type: 'bar', data: { labels: data.furtive_extraction.chart_data.labels, datasets: [{ label: 'Cantidad', data: data.furtive_extraction.chart_data.data }] }, options: { plugins: { title: { display: true, text: 'Furtivismo en las ACM (cantidad)', font: { size: 16 } } } } } };
+                let table_html = '<table class="table table-sm table-striped mt-3"><thead><tr><th>Cantidad Estimada</th><th>Establecimientos</th></tr></thead><tbody>';
+                data.furtive_extraction.table_data.forEach(row => {
+                    table_html += `<tr><td>${row['Extraccion Furtiva']}</td><td>${row['Nombre del establecimiento'].join('<br>')}</td></tr>`;
+                });
+                table_html += '</tbody></table>';
+                document.getElementById('furtiveExtractionTable').innerHTML = table_html;
+            }
+            else if (containerId === 'boarEstimationChartContainer') chartInfo = { chartId: 'boarEstimationChart', config: { type: 'bar', data: { labels: data.boar_estimation.labels, datasets: [{ label: '# Establecimientos', data: data.boar_estimation.data }] }, options: { plugins: { title: { display: true, text: 'Estimacion de cantidad de Jabali en las ACM', font: { size: 16 } } } } } };
+            else if (containerId === 'pumaEstimationChartContainer') chartInfo = { chartId: 'pumaEstimationChart', config: { type: 'bar', data: { labels: data.puma_estimation.labels, datasets: [{ label: '# Establecimientos', data: data.puma_estimation.data }] }, options: { plugins: { title: { display: true, text: 'Estimación de cantidad de pumas en las ACM', font: { size: 16 } } } } } };
+            else if (containerId === 'pumaTrendChartContainer') chartInfo = { chartId: 'pumaTrendChart', config: { type: 'pie', data: { labels: data.puma_trend.labels, datasets: [{ data: data.puma_trend.data }] }, options: { plugins: { title: { display: true, text: 'Tendencia de los ultimos años de Pumas', font: { size: 16 } } } } } };
+            else if (containerId === 'guanacosChartContainer') chartInfo = { chartId: 'guanacosChart', config: { type: 'bar', data: { labels: data.guanacos.labels, datasets: [{ label: '# Establecimientos', data: data.guanacos.data }] }, options: { plugins: { title: { display: true, text: 'Presencia de Guanacos en las ACM', font: { size: 16 } } } } } };
+            toggleSubView(containerId, chartInfo);
+        }
+    </script>
+</body>
+</html>
