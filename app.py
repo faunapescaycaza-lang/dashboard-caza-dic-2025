@@ -24,6 +24,7 @@ def clean_permisos_caza_data(df):
             'el rincon': 'El Rincón', 'el rincón': 'El Rincón', 'establecimiento caleufu': 'Estancia Caleufu',
             'establecimiento: caleufu': 'Estancia Caleufu', 'estancia caleufu': 'Estancia Caleufu',
             'estancia palitue': 'Palitue', 'palitue': 'Palitue', 'santa lucia': 'Santa Lucía', 'santa lucía': 'Santa Lucía',
+            'cdz': 'Cabeza de Zorro', 'cabeza de zorro': 'Cabeza de Zorro',
         }
         df['acm_temp'] = df['acm_temp'].replace(replace_map)
         df['acm_(área_de_caza_mayor)'] = df['acm_temp'].apply(lambda x: ' '.join([word.capitalize() for word in x.split(' ')]))
